@@ -69,7 +69,7 @@ function calcnice(ndays, pri,    nice) {
 	return nice - pri
 }
 
-# depth-first recursively visit tasks
+# depth-first recursively visit tasks and update their niceness
 function visit(node,    blocked, other, i, s) {
 	if (visited[node] > 1)
 		return

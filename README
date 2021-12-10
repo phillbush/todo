@@ -48,11 +48,11 @@ For example, consider the following input.
 	TODO release: (C) Release todo(1).                       deps:todo,manual
 }
 
-If today were 11 September 2021, then running todo(1) on this input
+If today were 11 December 2021, then running todo(1) on this input
 would print the following:
 
 {
-	(C) Write manual for todo(1). due:2021-09-03
+	(C) Write manual for todo(1). due:2021-12-13
 	(A) Implement data structures for tasks.
 	(B) Think in a interface for todo(1)
 }

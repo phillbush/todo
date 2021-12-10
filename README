@@ -1,0 +1,63 @@
+                                todo(1)
+
+Todo(1) reads files for tasks, one task per line; and writes to the
+standard output those tasks that should be done, and that are not
+blocked by other undone tasks, ordered in decreasing order of urgency
+(the most urgent the task is, the first it is listed).
+
+A task has the following syntax:
+
+{
+	[STATUS] NAME: [PRIORITY] DESCRIPTION [PROPERTY:VALUE]...
+}
+
+Each task begins with an optional status.  Two status are possible: TODO
+(which defines a uncompleted task) or DONE (which defines a completed
+task).  If no status is supplied, it is considered as TODO.
+
+After the status comes the obligatory task name.  The task name is a
+single alphanumeric word without spaces that names the task.  The task
+name must be followed by a colon.
+
+After the task name comes the optional priority.  The priority is a
+single uppercase letter between parentheses.  The letter must be A, B or
+C.  The lower the letter, the higher the priority; so “A” is the higher
+priority.
+
+Then, comes the obligatory task description.  The task description spans
+to the beginning of the first property.
+
+After the task description comes the properties.  Properties are a space-
+delimited list of name-value pairs separated by colon.  The following
+property names and their respective values are listed below.
+• due: A property of the form due:YYYY-MM-DD specifies the deadline of
+       the task.
+• deps: A property of the form deps:dep1,dep2,…,depN specifies a comma-
+        delimited list of tasks that this task depends on.
+
+For example, consider the following input.
+
+{
+	DONE project: (B) Initial project for todo(1).
+	TODO manual:  (C) Write manual for todo(1).              due:2021-12-13
+	TODO usage:   (B) Think in a interface for todo(1)
+	TODO data:    (A) Implement data structures for tasks.   deps:project
+	TODO parser:  (B) Write code for parsing tasks.          deps:data
+	TODO algor:   (A) Implement algorithm for sorting tasks. deps:parser
+	TODO todo:    (B) Write the todo(1) utility.             deps:parser,algor
+	TODO release: (C) Release todo(1).                       deps:todo,manual
+}
+
+If today were 11 September 2021, then running todo(1) on this input
+would print the following:
+
+{
+	(C) Write manual for todo(1). due:2021-09-03
+	(A) Implement data structures for tasks.
+	(B) Think in a interface for todo(1)
+}
+
+Note that, although the task to write the manual has low priority (C),
+it is listed first because its deadline is near and there is a task that
+depends on it.
+

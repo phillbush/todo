@@ -1,0 +1,227 @@
+#!/usr/bin/awk -f
+
+# print error and exit
+function err(s) {
+	printf "todo: %s\n", s >"/dev/stderr"
+	error = 1
+	exit error
+}
+
+# whitespace single-byte character test
+function isspace(c) {
+	return c == " " || c == "\t" || c == "\n" || c == "\f" || c == "\r" || c == "\v"
+}
+
+# convert year-month-day to unix julian day (days since unix epoch)
+function julian(y, m, d)
+{
+	if (m < 3) {
+		y--
+		m += 12
+	}
+	return (y * 365) + int(y / 4) - int(y / 100) + int(y / 400) - 719468 + int((m * 153 + 3) / 5) - 92 + d - 1
+}
+
+# get todays value in julian day
+function gettoday(    time, y, m, d) {
+	time = systime();
+	y = strftime("%Y", time) + 0
+	m = strftime("%m", time) + 0
+	d = strftime("%d", time) + 0
+	return julian(y, m, d)
+}
+
+# get identifier for task
+function getid(task) {
+	return sprintf("%d%s", nfiles, task)
+}
+
+# add dependencies; build directed graph of tasks
+function adddeps(task, s,    n, i, a) {
+	n = split(s, a, ",")
+	for (i = 1; i <= n; i++) {
+		npreds[a[i]]++
+		succs[task, ++nsuccs[task]] = getid(a[i])
+	}
+}
+
+# set task due date
+function adddate(task, s,    i, a) {
+	if (split(s, a, "-") != 3)
+		return
+	date[task] = s
+	due[task] = julian(a[1], a[2], a[3])
+	ndays[task] = due[task] - today
+}
+
+# compute niceness as as log2(ndays) - pri; we use rshift() to calc log2 :)
+function calcnice(ndays, pri,    nice) {
+	if (ndays < 0) {
+		ndays = -ndays
+		while ((ndays = rshift(ndays, 1))) {
+			nice--
+		}
+	} else {
+		while ((ndays = rshift(ndays, 1))) {
+			nice++
+		}
+	}
+	return nice - pri
+}
+
+# depth-first recursively visit tasks
+function visit(node,    blocked, other, i, s) {
+	if (visited[node] > 1)
+		return
+	visited[node] = 1
+	blocked = isdone[node]
+	for (i = 1; i <= nsuccs[node]; i++) {
+		if (visited[other = succs[node, i]] == 0) {
+			visit(other)
+		} else if (visited[other] == 1) {
+			err("cyclic dependency between tasks \"" node "\" and \"" other "\"")
+		}
+		if (!isdone[other]) {
+			blocked = 1
+			if (due[other] != 0) {
+				if (due[node] == 0 || ndays[other] <= ndays[node])
+					ndays[node] = ndays[other] - 1
+				due[node] = 1
+			}
+			if (priority[other] > priority[node]) {
+				priority[node] = priority[other]
+			}
+		}
+	}
+	visited[node] = 2
+	nice[node] = calcnice(ndays[node], priority[node])
+	if (!blocked) {
+		unblocked[++nunblocked] = node
+	}
+}
+
+# swap entries in array of unblocked tasks
+function swap(i, j,    t) {
+	t = unblocked[i]
+	unblocked[i] = unblocked[j]
+	unblocked[j] = t
+}
+
+# sort array of unblocked tasks according to their niceness
+function qsort(left, right,    i, last) {
+	if (left >= right)
+		return
+	swap(left, left + int((right - left + 1) * rand()))
+	last = left
+	for(i = left + 1; i <= right; i++)
+		if (nice[unblocked[i]] < nice[unblocked[left]])
+			swap(++last, i)
+	swap(left, last)
+	qsort(left, last - 1)
+	qsort(last + 1, right)
+}
+
+# filter the tasks into the unblocked list of tasks
+function setunblocked(    task, i) {
+	# we do a reverse topological visiting; while we do it, we
+	# compute the niceness of a task; at the end, we'll have a
+	# unsorted array of unblocked tasks,  which will be sorted
+	# according to their niceness
+	for (task in descr)
+		visit(task)
+	delete visited
+	qsort(1, nunblocked)
+}
+
+BEGIN {
+	DEFNDAYS = 8                    # defaqult n of days til deadline for tasks without due date
+	DEFNICE = 3                     # log2(DEFNDAYS)
+	TODO = "TODO"
+	DONE = "DONE"
+	DEPS = "deps"
+	DUE = "due"
+	PRI["A"] = PRI["a"] = 1
+	PRI["C"] = PRI["c"] = -1
+	OUTPRI[1]  = "(A)"
+	OUTPRI[0]  = "(B)"
+	OUTPRI[-1] = "(C)"
+	today = gettoday()
+}
+
+FNR == 1 {
+	nfiles++
+}
+
+NF == 0 || substr($1, 1, 1) == "#" {
+	next
+}
+
+{
+	# substr() is faster than sub()
+
+	# get status
+	while(isspace(substr($0, 1, 1)))
+		$0 = substr($0, 2)
+	if ((done = (s = substr($0, 1, 4)) == DONE) || s == TODO)
+		$0 = substr($0, 5)
+
+	# get task identifier
+	while(isspace(substr($0, 1, 1)))
+		$0 = substr($0, 2)
+	if (!match($0, /^[^ \t]+:/))
+		next
+	task = getid(substr($0, RSTART, RLENGTH - 1))
+	$0 = substr($0, RSTART + RLENGTH)
+
+	# get priority
+	pri = 0
+	while(isspace(substr($0, 1, 1)))
+		$0 = substr($0, 2)
+	if (match($0, /^\(.\)/)) {
+		pri = PRI[substr($0, 2, 1)] + 0
+		$0 = substr($0, RSTART + RLENGTH)
+	}
+
+	# each task is described by a set of arrays indexed by the id of the task
+	file[task] = nfiles
+	isdone[task] = done
+	priority[task] = pri
+
+	# set due and ndays to default values, them may be updated by the DUE property
+	due[task] = 0
+	ndays[task] = DEFNDAYS
+
+	# get properties
+	while ($NF ~ /[^:]+:.+/) {
+		if (substr($NF, 1, 4) == DEPS)
+			adddeps(task, substr($NF, 6))
+		if (substr($NF, 1, 3) == DUE)
+			adddate(task, substr($NF, 5))
+		$NF = ""
+		$0 = $0
+	}
+
+	# remove trailing and leading blanks
+	while(isspace(substr($0, 1, 1)))
+		$0 = substr($0, 2)
+	while(isspace(substr($0, (l = length($0)), 1)))
+		$0 = substr($0, 1, l - 1)
+
+	# description of task (remaining of input line)
+	descr[task] = $0
+}
+
+END {
+	setunblocked()
+	for (i = 1; i <= nunblocked; i++) {
+		printf "%s ", OUTPRI[priority[unblocked[i]]]
+		if (ARGC > 2)
+			printf "%s: ", ARGV[file[unblocked[i]]]
+		printf "%s", descr[unblocked[i]]
+		if (date[unblocked[i]])
+			printf " due:%s", date[unblocked[i]]
+		if (DEBUG)
+			printf " (%d)", nice[unblocked[i]]
+		printf "\n"
+	}
+}

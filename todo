@@ -3,8 +3,7 @@
 # print error and exit
 function err(s) {
 	printf "todo: %s\n", s >"/dev/stderr"
-	error = 1
-	exit error
+	exit 1
 }
 
 # whitespace single-byte character test
